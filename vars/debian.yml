@@ -1,0 +1,11 @@
+# Copyright (c) 2023, Bennett Samowich <bennett@foolean.org>
+# All rights reserved
+# SPDX short identifier: BSD-3-Clause
+---
+
+# kodi_packages
+#   List of packages to be installed/removed
+kodi_packages:
+  - 'kodi'
+  - 'kodi-bin'
+  - 'kodi-eventclients-kodi-send'

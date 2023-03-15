@@ -1,0 +1,96 @@
+# Copyright (c) 2023, Bennett Samowich <bennett@foolean.org>
+# All rights reserved
+# SPDX short identifier: BSD-3-Clause
+---
+
+# We put the entire role in a block so we can create
+# a role specific tag, which saves the caller from
+# having to do so in their playbook.
+- name: Role foolean/kodi
+  block:
+
+    - name: Set OS variables
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      with_first_found:
+        - "{{ ansible_os_family|lower }}.yml"
+        - "default.yml"
+
+    - name: Install kodi
+      become: true
+      ansible.builtin.package:
+        name: "{{ kodi_packages }}"
+        state: present
+
+    - name: Create the Kodi group
+      become: true
+      ansible.builtin.group:
+        name: 'kodi'
+        state: present
+
+    - name: Create the Kodi user
+      become: true
+      ansible.builtin.user:
+        name: "{{ kodi_user }}"
+        state: present
+        create_home: true
+        home: "/home/{{ kodi_user }}"
+        shell: "/bin/bash"
+        group: "kodi"
+        groups:
+          - 'cdrom'
+          - 'audio'
+          - 'video'
+          - 'plugdev'
+          - 'users'
+          - 'input'
+          - 'netdev'
+          - 'i2c'
+          - 'gpio'
+
+    - name: Create the Kodi service
+      become: true
+      ansible.builtin.template:
+        src: 'etc/systemd/system/kodi.service.j2'
+        dest: '/etc/systemd/system/kodi.service'
+        owner: 'root'
+        group: 'root'
+        mode: '0644'
+      notify:
+        - Kodi systemd daemon-reload
+
+    - name: Flush handlers
+      ansible.builtin.meta:
+        flush_handlers
+
+    - name: Ensure Kodi is enabled and running
+      become: true
+      ansible.builtin.systemd:
+        name: 'kodi.service'
+        enabled: true
+        state: started
+
+    - name: Kodi backup script
+      become: true
+      ansible.builtin.template:
+        src: 'usr/local/bin/kodi-backup.j2'
+        dest: '/usr/local/bin/kodi-backup'
+        owner: 'root'
+        group: 'root'
+        mode: '0755'
+
+    - name: Kodi backup cron job
+      become: true
+      ansible.builtin.template:
+        src: 'etc/cron.d/kodi.j2'
+        dest: '/etc/cron.d/kodi'
+        owner: 'root'
+        group: 'root'
+        mode: '0644'
+
+  when:
+    - ansible_os_family|lower == "debian"
+
+  # Tags to be applied to this role (block)
+  tags:
+    - 'role_foolean_kodi'

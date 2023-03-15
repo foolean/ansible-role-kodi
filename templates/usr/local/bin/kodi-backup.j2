@@ -1,0 +1,119 @@
+#!/bin/bash
+#
+# kodi-backup - backup the Kodi data
+#
+###############################################################################
+
+# Make sure the script fails properly
+set -o errexit
+set -o pipefail
+set -o nounset
+
+# Set a sane path
+PATH="/bin:/usr/bin"
+
+# The age old question of 'who am I?'
+MYPATH=$(readlink -f $(dirname $0))
+MYNAME=$(basename $0)
+
+# Path to be backed up
+KODI_HOME="/home/{{ kodi_user}}"
+
+# Path to where the backups will be stored
+BACKUP_DIR="backup"
+
+# Base name of the backup file
+BACKUP_NAME="kodi-backup"
+
+# Number of backups to keep
+KEEP="7"
+
+# Macro to help log what we're doing
+LOGGER="/usr/bin/logger -t ${MYNAME}[$$]"
+
+# Simple usage routine
+usage() {
+
+    echo "usage: ${MYNAME} [OPTIONS]"
+    echo "where:"
+    echo "  -B [DIR]    - where to store the backups [default: ${BACKUP_DIR}]"
+    echo "  -d          - turn on debugging output"
+    echo "  -H [DIR]    - Kodi 'home' to be backed up [default: ${KODI_HOME}]"
+    echo "  -h          - print this message"
+    echo "  -K [KEEP]   - number of backups to keep [default: ${KEEP}]"
+    exit 1
+}
+
+# Parse the command-line options
+while getopts "dB:hH:K:" OPTION
+do
+    case $OPTION in
+        B)
+            BACKUP_DIR="${OPTARG}"
+            ;;
+        d)
+            set -o xtrace
+            ;;
+        H)
+            KODI_HOME="${OPTARG}"
+            ;;
+        h)
+            usage
+            exit 1; # should never get here
+            ;;
+        K)
+            KEEP="${OPTARG}"
+            ;;
+        ?)
+            echo "${FUNCNAME[0]}: Unknown argument, exiting"
+            exit 1
+            ;;
+    esac
+done
+
+# Log that we're starting
+${LOGGER} "Kodi backup processing starting"
+
+# Make sure the backup source exists
+if [ ! -d "${KODI_HOME}" ]
+then
+    ${LOGGER} "Error '${KODI_HOME}' does not exist, exiting"
+    exit 1
+fi
+
+# Convert the backup destination to an absolute path
+EXCLUDE_DIR="${BACKUP_DIR}"
+if [ $(echo "${BACKUP_DIR}" | cut -c1) != / ]
+then
+    BACKUP_DIR=$(readlink -m "${KODI_HOME}/${BACKUP_DIR}")
+fi
+
+# Make sure the backup destination exists
+if [ ! -d "${BACKUP_DIR}" ]
+then
+    ${LOGGER} "Creating '${BACKUP_DIR}'"
+    umask 0077
+    mkdir -p "${BACKUP_DIR}"
+fi
+
+# Backup Kodi
+${LOGGER} "Creating new backup"
+umask 0277
+/bin/tar                        \
+    --directory "${KODI_HOME}"  \
+    --create                    \
+    --gzip                      \
+    --exclude="${EXCLUDE_DIR}"  \
+    --file "${BACKUP_DIR}/${BACKUP_NAME}_$(date +%Y%m%d%H%M).tar.gz" \
+    .
+
+# Clean up old backups
+${LOGGER} "Cleaning old backups (keeping ${KEEP})"
+for BACKUP in $(ls "${BACKUP_DIR}/${BACKUP_NAME}_"*.tar.gz | sort | head -n -"${KEEP}")
+do
+    ${LOGGER} "Removing '${BACKUP}'"
+    rm -rf "${BACKUP}"
+done
+
+# Log that we're done
+${LOGGER} "Kodi backup processing complete"
